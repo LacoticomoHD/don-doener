@@ -1,7 +1,9 @@
-import * as Haptics from 'expo-haptics';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useTheme } from '@/theme/ThemeProvider';
+
+import { tap } from './ui';
 
 /** Anzeige (mit halben Sternen) oder Eingabe (1–5) von Sternen. */
 export function StarRating({
@@ -18,27 +20,21 @@ export function StarRating({
 }) {
   const { theme } = useTheme();
   const v = value ?? 0;
+  const interactive = !!onChange;
 
   return (
     <View
-      style={styles.row}
-      accessibilityRole={onChange ? 'adjustable' : 'image'}
+      style={[styles.row, interactive && styles.spread]}
+      accessibilityRole={interactive ? 'adjustable' : 'image'}
       accessibilityLabel={label ? `${label}: ${v} / 5` : `${v} / 5`}
     >
       {[1, 2, 3, 4, 5].map((star) => {
-        // Füllgrad dieses Sterns in 0, 0.5 oder 1
-        const fill = v >= star - 0.25 ? 1 : v >= star - 0.75 ? 0.5 : 0;
-        const glyph = (
-          <View style={{ width: size * 1.05, height: size * 1.2 }}>
-            <Text style={[styles.glyph, { fontSize: size, color: theme.colors.starEmpty }]}>★</Text>
-            {fill > 0 ? (
-              <View style={[styles.overlay, { width: `${fill * 100}%` }]}>
-                <Text style={[styles.glyph, { fontSize: size, color: theme.colors.star }]}>★</Text>
-              </View>
-            ) : null}
-          </View>
+        const name = v >= star - 0.25 ? 'star' : v >= star - 0.75 ? 'star-half' : interactive ? 'star' : 'star-outline';
+        const filled = v >= star - 0.75;
+        const icon = (
+          <Ionicons name={name} size={size} color={filled ? theme.colors.star : theme.colors.starEmpty} />
         );
-        if (!onChange) return <View key={star}>{glyph}</View>;
+        if (!interactive) return <View key={star}>{icon}</View>;
         return (
           <Pressable
             key={star}
@@ -46,11 +42,12 @@ export function StarRating({
             accessibilityRole="button"
             accessibilityLabel={`${star}`}
             onPress={() => {
-              if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+              tap();
               onChange(star);
             }}
+            style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.85 : v === star ? 1.12 : 1 }] })}
           >
-            {glyph}
+            {icon}
           </Pressable>
         );
       })}
@@ -59,7 +56,6 @@ export function StarRating({
 }
 
 const styles = StyleSheet.create({
-  glyph: { includeFontPadding: false },
-  overlay: { left: 0, overflow: 'hidden', position: 'absolute', top: 0 },
-  row: { alignItems: 'center', flexDirection: 'row' },
+  row: { alignItems: 'center', flexDirection: 'row', gap: 1 },
+  spread: { justifyContent: 'space-between' },
 });

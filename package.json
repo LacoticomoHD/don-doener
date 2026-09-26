@@ -3,10 +3,15 @@
   "version": "2.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
+    "@expo-google-fonts/dm-sans": "^0.4.2",
+    "@expo/vector-icons": "^15.0.2",
+    "@gorhom/bottom-sheet": "^5.2.14",
     "@maplibre/maplibre-react-native": "^11.4.0",
     "@supabase/supabase-js": "^2.117.2",
     "expo": "~57.0.25",
     "expo-constants": "~57.0.19",
+    "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.11",
@@ -20,9 +25,12 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

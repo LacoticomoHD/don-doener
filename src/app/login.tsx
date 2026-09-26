@@ -1,15 +1,18 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Screen, TextField, Txt } from '@/components/ui';
+import { Button, Screen, Sticker, TextField, Txt } from '@/components/ui';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useAuth } from '@/lib/auth';
 import { showMessage } from '@/lib/dialog';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { space } from '@/theme/tokens';
+import { useTheme } from '@/theme/ThemeProvider';
+import { fonts, radius, space } from '@/theme/tokens';
 
 export default function LoginScreen() {
+  const { theme } = useTheme();
+  const c = theme.colors;
   const { t } = useI18n();
   const { signIn, signUp, resetPassword } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -40,21 +43,38 @@ export default function LoginScreen() {
 
   return (
     <Screen contentContainerStyle={styles.content}>
-      <Text style={styles.logo}>🥙</Text>
-      <Txt variant="title" style={styles.center}>
-        {t('app.name')}
-      </Txt>
-      <Txt tone="muted" style={styles.center}>
-        {t('auth.why')}
-      </Txt>
+      <Sticker color={c.primary} style={styles.hero}>
+        <Text style={styles.logo}>🥙</Text>
+        <Text style={styles.wordmark}>DON DÖNER</Text>
+        <Txt tone="onPrimary" style={styles.center}>
+          {t('auth.why')}
+        </Txt>
+      </Sticker>
+
       {!isSupabaseConfigured ? (
         <Txt variant="caption" tone="danger" style={styles.center}>
           {t('common.notConfigured')}
         </Txt>
       ) : null}
 
+      {/* Umschalter Login / Registrieren */}
+      <View style={[styles.segment, { backgroundColor: c.surface, borderColor: c.border }]}>
+        {(['login', 'register'] as const).map((m) => (
+          <Pressable
+            key={m}
+            onPress={() => setMode(m)}
+            style={[styles.segmentItem, mode === m && { backgroundColor: c.secondary, borderColor: c.border }]}
+          >
+            <Txt variant="label" tone={mode === m ? 'onSecondary' : 'muted'}>
+              {m === 'login' ? t('auth.login') : t('auth.register')}
+            </Txt>
+          </Pressable>
+        ))}
+      </View>
+
       <TextField
         label={t('auth.email')}
+        icon="mail"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -65,37 +85,42 @@ export default function LoginScreen() {
       />
       <TextField
         label={t('auth.password')}
+        icon="lock-closed"
         value={password}
         onChangeText={setPassword}
         secure
         autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
         textContentType={mode === 'login' ? 'password' : 'newPassword'}
         placeholder="••••••••"
+        hint={mode === 'register' ? t('auth.passwordShort') : undefined}
         onSubmitEditing={submit}
         returnKeyType="go"
       />
 
-      <Button title={mode === 'login' ? t('auth.login') : t('auth.register')} onPress={submit} loading={busy} />
-
-      <Pressable onPress={() => setMode(mode === 'login' ? 'register' : 'login')} style={styles.link}>
-        <Txt variant="label" tone="primary">
-          {mode === 'login' ? t('auth.toRegister') : t('auth.toLogin')}
-        </Txt>
-      </Pressable>
-      {mode === 'login' ? (
-        <Pressable onPress={forgot} style={styles.link}>
-          <Txt variant="caption" tone="muted">
-            {t('auth.forgot')}
-          </Txt>
-        </Pressable>
-      ) : null}
+      <Button
+        title={mode === 'login' ? t('auth.login') : t('auth.register')}
+        icon={mode === 'login' ? 'log-in' : 'person-add'}
+        onPress={submit}
+        loading={busy}
+      />
+      {mode === 'login' ? <Button title={t('auth.forgot')} variant="ghost" onPress={forgot} /> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   center: { textAlign: 'center' },
-  content: { gap: space.lg, paddingTop: space.xl },
-  link: { alignSelf: 'center', padding: space.xs },
-  logo: { fontSize: 56, textAlign: 'center' },
+  content: { gap: space.lg, paddingTop: space.md },
+  hero: { alignItems: 'center', gap: space.sm, padding: space.xl },
+  logo: { fontSize: 56, lineHeight: 64, transform: [{ rotate: '-10deg' }] },
+  segment: { borderRadius: radius.pill, borderWidth: 2, flexDirection: 'row', padding: 4 },
+  segmentItem: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    flex: 1,
+    paddingVertical: 10,
+  },
+  wordmark: { color: '#FFFFFF', fontFamily: fonts.display, fontSize: 40, letterSpacing: -1 },
 });

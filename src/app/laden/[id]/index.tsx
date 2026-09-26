@@ -1,10 +1,13 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OpeningHoursTable } from '@/components/OpeningHoursTable';
-import { Button, Chip, LoadingView, MessageView, Screen, Section, Txt } from '@/components/ui';
+import { RouteSheet } from '@/components/RouteSheet';
+import { ScoreBadge } from '@/components/ShopCard';
+import { Button, Chip, IconButton, LinkRow, LoadingView, MessageView, Section, Sticker, Txt } from '@/components/ui';
 import { useI18n } from '@/i18n/I18nProvider';
 import {
   deleteShop,
@@ -19,20 +22,20 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { confirmAction, errorMessage, showMessage } from '@/lib/dialog';
-import { openDirections, TRAVEL_MODES } from '@/lib/directions';
 import { formatDate, formatPrice, formatScore } from '@/lib/format';
 import { hasOpeningHours, isOpenNow } from '@/lib/openingHours';
 import { useFocusedAsync } from '@/lib/useAsync';
 import { useRequireLogin } from '@/lib/useRequireLogin';
 import { useTheme } from '@/theme/ThemeProvider';
-import { GLUT_GRADIENT, radius, scoreColor, space } from '@/theme/tokens';
-import { PRICE_FIELDS, PRICE_ICONS, RATING_CATEGORIES, SHOP_FEATURE_ICONS } from '@/types';
+import { fonts, radius, scoreColor, space } from '@/theme/tokens';
+import { PRICE_FIELDS, RATING_CATEGORIES, SHOP_FEATURE_ICONS } from '@/types';
 
 export default function ShopDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme } = useTheme();
   const c = theme.colors;
   const { t, lang } = useI18n();
+  const insets = useSafeAreaInsets();
   const { user, isAdmin } = useAuth();
   const requireLogin = useRequireLogin();
 
@@ -59,18 +62,18 @@ export default function ShopDetailScreen() {
   // Lokale Änderungen überlagern den geladenen Stand sofort (optimistisches UI)
   const [favoriteOverride, setFavoriteState] = useState<boolean | null>(null);
   const [hoursVoteOverride, setHoursVoteState] = useState<Vote | null>(null);
-  const [showRoutes, setShowRoutes] = useState(false);
+  const [routeOpen, setRouteOpen] = useState(false);
   const favorite = favoriteOverride ?? mine.data?.favorite ?? false;
   const hoursVote = hoursVoteOverride ?? mine.data?.hoursVote ?? 0;
 
+  const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
   if (detail.loading && !detail.data) return <LoadingView />;
   if (detail.error && !detail.data) {
-    return (
-      <MessageView icon="⚠️" message={t('common.loadError')} actionLabel={t('common.retry')} onAction={detail.reload} />
-    );
+    return <MessageView icon="⚠️" message={t('common.loadError')} actionLabel={t('common.retry')} onAction={detail.reload} />;
   }
   const shop = detail.data?.shop;
-  if (!shop) return <MessageView icon="🤷" message={t('detail.notFound')} />;
+  if (!shop) return <MessageView icon="🤷" message={t('detail.notFound')} actionLabel={t('common.back')} onAction={back} />;
 
   const prices = detail.data?.prices ?? [];
   const stats = shop.stats;
@@ -81,6 +84,7 @@ export default function ShopDetailScreen() {
   const hoursOutdated = (shop.hoursStats?.score ?? 0) <= -2;
   const canDelete = !!user && (isAdmin || shop.created_by === user.id);
   const knownPrices = PRICE_FIELDS.filter((f) => shop[f] != null);
+  const hasRating = mine.data?.hasRating ?? false;
 
   const toggleFavorite = async () => {
     const userId = requireLogin();
@@ -135,104 +139,78 @@ export default function ShopDetailScreen() {
     if (!ok) return;
     try {
       await deleteShop(shop.id);
-      router.back();
+      back();
     } catch (e) {
       showMessage(t('common.error'), errorMessage(e));
     }
   };
 
-  const actions = [
-    { icon: '⭐', label: mine.data?.hasRating ? t('detail.rateAgain') : t('detail.rate'), onPress: rate },
-    { icon: '🧭', label: t('detail.route'), onPress: () => setShowRoutes((v) => !v), active: showRoutes },
-    { icon: favorite ? '❤️' : '🤍', label: favorite ? t('detail.saved') : t('detail.save'), onPress: toggleFavorite },
-    { icon: '📤', label: t('detail.share'), onPress: share },
-  ];
-
   return (
-    <>
-      <Stack.Screen options={{ title: shop.name }} />
-      <Screen contentContainerStyle={styles.content}>
-        <LinearGradient colors={GLUT_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+    <View style={[styles.flex, { backgroundColor: c.background }]}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}>
+        {/* Kopf in Markenfarbe */}
+        <View style={[styles.hero, { backgroundColor: c.primary, borderColor: c.border, paddingTop: insets.top + space.sm }]}>
+          <View style={styles.heroBar}>
+            <IconButton icon="arrow-back" label={t('common.back')} onPress={back} size={44} />
+            <View style={styles.flex} />
+            <IconButton icon="share-social" label={t('detail.share')} onPress={share} size={44} />
+            <IconButton
+              icon={favorite ? 'heart' : 'heart-outline'}
+              iconColor={favorite ? c.primary : undefined}
+              label={favorite ? t('detail.saved') : t('detail.save')}
+              onPress={toggleFavorite}
+              size={44}
+            />
+          </View>
+
           {shop.city ? <Text style={styles.heroCity}>{shop.city.toUpperCase()}</Text> : null}
           <Text style={styles.heroName}>{shop.name}</Text>
-          <Text style={styles.heroAddress}>📍 {shop.address}</Text>
-          <View style={styles.heroRow}>
-            <View style={styles.scoreBadge}>
-              <Text style={styles.scoreValue}>{avg != null ? formatScore(avg, lang) : '–'}</Text>
-              <Text style={styles.scoreMax}>/ 5</Text>
-            </View>
-            {shop.doener_preis != null ? (
-              <HeroPill label={`🥙 ${formatPrice(shop.doener_preis, lang)}`} />
-            ) : null}
-            {knownHours ? (
-              <HeroPill label={`● ${open ? t('common.open') : t('common.closed')}`} color={open ? '#B9F6CA' : '#FFCDD2'} />
-            ) : null}
-            {shop.kartenzahlung != null ? (
-              <HeroPill label={shop.kartenzahlung ? '💳' : '💵'} />
-            ) : null}
+          <View style={styles.heroAddress}>
+            <Ionicons name="location" size={15} color="rgba(255,255,255,0.9)" />
+            <Text style={styles.heroAddressText}>{shop.address}</Text>
           </View>
-          {stats && stats.verified_count > 0 ? (
-            <Text style={styles.heroNote}>
-              📍 {t('detail.verified', { v: stats.verified_count, n: stats.rating_count })}
-            </Text>
-          ) : null}
-        </LinearGradient>
+
+          <View style={styles.heroStats}>
+            <ScoreBadge value={avg} size={78} />
+            <View style={styles.heroStatText}>
+              <Text style={styles.heroStrong}>
+                {stats == null
+                  ? t('common.noRating')
+                  : stats.rating_count === 1
+                    ? t('common.ratingsCountOne')
+                    : t('common.ratingsCount', { n: stats.rating_count })}
+              </Text>
+              {stats && stats.verified_count > 0 ? (
+                <Text style={styles.heroSoft}>✓ {t('detail.verified', { v: stats.verified_count, n: stats.rating_count })}</Text>
+              ) : null}
+              <View style={styles.heroPills}>
+                {knownHours ? (
+                  <View style={[styles.heroPill, { backgroundColor: open ? '#1E9E5A' : '#1C1410' }]}>
+                    <Text style={styles.heroPillText}>{open ? t('common.open') : t('common.closed')}</Text>
+                  </View>
+                ) : null}
+                {shop.kartenzahlung != null ? (
+                  <View style={[styles.heroPill, { backgroundColor: '#1C1410' }]}>
+                    <Ionicons name={shop.kartenzahlung ? 'card' : 'cash'} size={13} color="#FFFFFF" />
+                    <Text style={styles.heroPillText}>{shop.kartenzahlung ? t('detail.cardShort') : t('detail.cashShort')}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        </View>
 
         <View style={styles.body}>
           {shop.ausgeblendet ? (
-            <Txt variant="caption" tone="danger">
-              {t('detail.hidden')}
-            </Txt>
+            <Sticker color={c.surfaceMuted} style={styles.notice}>
+              <Ionicons name="eye-off" size={18} color={c.danger} />
+              <Txt variant="caption" tone="danger" style={styles.flex}>
+                {t('detail.hidden')}
+              </Txt>
+            </Sticker>
           ) : null}
 
-          <View style={styles.actions}>
-            {actions.map((a) => (
-              <Pressable
-                key={a.icon}
-                accessibilityRole="button"
-                onPress={a.onPress}
-                style={({ pressed }) => [
-                  styles.action,
-                  {
-                    backgroundColor: a.active ? c.surfaceMuted : c.surface,
-                    borderColor: c.border,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Text style={styles.actionIcon}>{a.icon}</Text>
-                <Txt variant="caption" style={styles.actionLabel} numberOfLines={1}>
-                  {a.label}
-                </Txt>
-              </Pressable>
-            ))}
-          </View>
-
-          {showRoutes ? (
-            <View style={styles.actions}>
-              {TRAVEL_MODES.map((m) => (
-                <Chip
-                  key={m.key}
-                  label={`${m.icon} ${t(`route.${m.key}`)}`}
-                  onPress={() => openDirections(shop, m.key)}
-                  style={styles.routeChip}
-                />
-              ))}
-            </View>
-          ) : null}
-
-          <Section
-            title={t('detail.ratingTitle')}
-            right={
-              stats ? (
-                <Txt variant="caption" tone="muted">
-                  {stats.rating_count === 1
-                    ? t('common.ratingsCountOne')
-                    : t('common.ratingsCount', { n: stats.rating_count })}
-                </Txt>
-              ) : null
-            }
-          >
+          <Section title={t('detail.ratingTitle')} icon="star">
             {stats ? (
               RATING_CATEGORIES.map((cat) => {
                 const value = stats[`avg_${cat}`];
@@ -242,12 +220,10 @@ export default function ShopDetailScreen() {
                     <Txt variant="caption" style={styles.barLabel}>
                       {t(`category.${cat}`)}
                     </Txt>
-                    <View style={[styles.barTrack, { backgroundColor: c.surfaceMuted }]}>
-                      <View
-                        style={[styles.barFill, { width: `${(value / 5) * 100}%`, backgroundColor: scoreColor(value, c) }]}
-                      />
+                    <View style={[styles.barTrack, { backgroundColor: c.surfaceMuted, borderColor: c.border }]}>
+                      <View style={[styles.barFill, { width: `${(value / 5) * 100}%`, backgroundColor: scoreColor(value, c) }]} />
                     </View>
-                    <Txt variant="caption" style={styles.barValue}>
+                    <Txt variant="label" style={styles.barValue}>
                       {formatScore(value, lang)}
                     </Txt>
                   </View>
@@ -256,26 +232,20 @@ export default function ShopDetailScreen() {
             ) : (
               <Txt tone="muted">{t('detail.noRatings')}</Txt>
             )}
-            <Button
-              title={mine.data?.hasRating ? t('detail.rateAgain') : t('detail.rate')}
-              icon="⭐"
-              onPress={rate}
-              style={styles.cta}
-            />
           </Section>
 
-          <Section title={t('detail.prices')}>
+          <Section title={t('detail.prices')} icon="pricetag">
             {knownPrices.length > 0 ? (
               <View style={styles.priceGrid}>
                 {knownPrices.map((f) => (
-                  <View key={f} style={[styles.priceTile, { backgroundColor: c.surfaceMuted }]}>
-                    <Txt variant="caption" tone="muted">
-                      {PRICE_ICONS[f]} {t(`price.${f}`)}
+                  <Sticker key={f} containerStyle={styles.priceCell} style={styles.priceTile} color={c.secondary} shadow={false}>
+                    <Txt variant="caption" tone="onSecondary">
+                      {t(`price.${f}`)}
                     </Txt>
-                    <Txt variant="heading" tone="accent">
+                    <Txt variant="title" tone="onSecondary">
                       {formatPrice(shop[f] as number, lang)}
                     </Txt>
-                  </View>
+                  </Sticker>
                 ))}
               </View>
             ) : (
@@ -288,30 +258,16 @@ export default function ShopDetailScreen() {
             ) : null}
             {prices.length >= 2 ? (
               <Txt variant="caption" tone="muted">
-                📈 {t('detail.priceHistory')}: {prices.map((p) => formatPrice(p.preis, lang)).join(' → ')}
+                {t('detail.priceHistory')}: {prices.map((p) => formatPrice(p.preis, lang)).join(' → ')}
               </Txt>
             ) : null}
-            <Txt variant="caption" tone="muted">
-              {shop.kartenzahlung == null
-                ? t('detail.cardUnknown')
-                : shop.kartenzahlung
-                  ? `💳 ${t('detail.cardYes')}`
-                  : `💵 ${t('detail.cardNo')}`}
-            </Txt>
           </Section>
 
-          <Section title={t('detail.features')}>
+          <Section title={t('detail.features')} icon="sparkles">
             {confirmedFeatures.length > 0 ? (
               <View style={styles.wrap}>
                 {confirmedFeatures.map((f) => (
-                  <View key={f.feature} style={[styles.badge, { backgroundColor: c.surfaceMuted, borderColor: c.border }]}>
-                    <Txt variant="caption">
-                      {SHOP_FEATURE_ICONS[f.feature]} {t(`feature.${f.feature}`)}
-                      <Txt variant="caption" tone="muted">
-                        {'  '}✓{f.bestaetigt}
-                      </Txt>
-                    </Txt>
-                  </View>
+                  <Chip key={f.feature} label={`${SHOP_FEATURE_ICONS[f.feature]} ${t(`feature.${f.feature}`)} · ${f.bestaetigt}`} />
                 ))}
               </View>
             ) : (
@@ -322,7 +278,7 @@ export default function ShopDetailScreen() {
             </Txt>
           </Section>
 
-          <Section title={t('detail.hours')}>
+          <Section title={t('detail.hours')} icon="time">
             {hoursOutdated ? (
               <Txt variant="caption" tone="danger">
                 {t('detail.hoursOutdated')}
@@ -334,123 +290,100 @@ export default function ShopDetailScreen() {
                 <Txt variant="caption" tone="muted" style={styles.flex}>
                   {t('detail.hoursQuestion')}
                 </Txt>
-                <Chip
-                  label={`👍 ${shop.hoursStats?.bestaetigt ?? 0}`}
-                  selected={hoursVote === 1}
-                  tone="success"
-                  onPress={() => voteHours(1)}
-                />
-                <Chip
-                  label={`👎 ${shop.hoursStats?.veraltet ?? 0}`}
-                  selected={hoursVote === -1}
-                  tone="danger"
-                  onPress={() => voteHours(-1)}
-                />
+                <Chip icon="thumbs-up" label={`${shop.hoursStats?.bestaetigt ?? 0}`} selected={hoursVote === 1} tone="success" onPress={() => voteHours(1)} />
+                <Chip icon="thumbs-down" label={`${shop.hoursStats?.veraltet ?? 0}`} selected={hoursVote === -1} tone="danger" onPress={() => voteHours(-1)} />
               </View>
             ) : null}
           </Section>
 
-          <View style={styles.links}>
-            <Button
-              title={t('detail.edit')}
-              icon="✏️"
-              variant="ghost"
-              compact
+          <Section title={t('detail.more')} icon="ellipsis-horizontal-circle">
+            <LinkRow
+              icon="create"
+              label={t('detail.edit')}
               onPress={() => requireLogin() && router.push({ pathname: '/laden/[id]/bearbeiten', params: { id: shop.id } })}
             />
-            <Button
-              title={t('detail.report')}
-              icon="🚩"
-              variant="ghost"
-              compact
-              onPress={() =>
-                requireLogin() &&
-                router.push({ pathname: '/laden/[id]/melden', params: { id: shop.id, name: shop.name } })
-              }
+            <LinkRow
+              icon="flag"
+              label={t('detail.report')}
+              last={!canDelete}
+              onPress={() => requireLogin() && router.push({ pathname: '/laden/[id]/melden', params: { id: shop.id, name: shop.name } })}
             />
-            {canDelete ? <Button title={t('detail.delete')} variant="danger" compact onPress={remove} /> : null}
-          </View>
+            {canDelete ? <LinkRow icon="trash" label={t('detail.delete')} onPress={remove} last /> : null}
+          </Section>
         </View>
-      </Screen>
-    </>
-  );
-}
+      </ScrollView>
 
-function HeroPill({ label, color = '#FFFFFF' }: { label: string; color?: string }) {
-  return (
-    <View style={styles.heroPill}>
-      <Text style={[styles.heroPillText, { color }]}>{label}</Text>
+      {/* Feste Aktionsleiste */}
+      <View style={[styles.actionBar, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + space.md }]}>
+        <Button title={t('detail.route')} icon="navigate" variant="plain" onPress={() => setRouteOpen(true)} style={styles.flex} />
+        <Button title={hasRating ? t('detail.rateAgain') : t('detail.rate')} icon="star" onPress={rate} style={styles.grow} />
+      </View>
+
+      <RouteSheet target={routeOpen ? shop : null} onClose={() => setRouteOpen(false)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  action: {
-    alignItems: 'center',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flex: 1,
-    gap: 2,
-    paddingHorizontal: 4,
-    paddingVertical: 10,
-  },
-  actionIcon: { fontSize: 19 },
-  actionLabel: { fontWeight: '700' },
-  actions: { flexDirection: 'row', gap: space.sm },
-  badge: { borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5 },
-  barFill: { borderRadius: 4, height: '100%' },
-  barLabel: { width: 112 },
-  barRow: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingVertical: 3 },
-  barTrack: { borderRadius: 4, flex: 1, height: 8, overflow: 'hidden' },
-  barValue: { fontVariant: ['tabular-nums'], fontWeight: '800', textAlign: 'right', width: 30 },
-  body: { gap: space.md, padding: space.lg },
-  content: { gap: 0, padding: 0 },
-  cta: { marginTop: space.sm },
-  flex: { flex: 1 },
-  hero: {
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
-    gap: 4,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  heroAddress: { color: 'rgba(255,255,255,0.88)', fontSize: 13, marginBottom: 10 },
-  heroCity: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
-  heroName: { color: '#FFFFFF', fontSize: 26, fontWeight: '800', letterSpacing: -0.3 },
-  heroNote: { color: 'rgba(255,255,255,0.92)', fontSize: 12, marginTop: 8 },
-  heroPill: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: 'rgba(255,255,255,0.35)',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-  },
-  heroPillText: { fontSize: 13, fontWeight: '700' },
-  heroRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  links: { alignItems: 'center', gap: 2, marginTop: space.xs },
-  priceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  priceTile: { borderRadius: radius.md, flexGrow: 1, minWidth: 120, padding: space.md },
-  routeChip: { alignItems: 'center', flex: 1, paddingHorizontal: 4 },
-  scoreBadge: {
-    alignItems: 'baseline',
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.md,
+  actionBar: {
+    borderTopWidth: 2,
+    bottom: 0,
     flexDirection: 'row',
-    gap: 3,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: space.md,
+    left: 0,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    position: 'absolute',
+    right: 0,
   },
-  scoreMax: { color: '#8B7E6C', fontSize: 11, fontWeight: '700' },
-  scoreValue: { color: '#C0392B', fontSize: 21, fontWeight: '800' },
+  barFill: { borderRadius: 6, height: '100%' },
+  barLabel: { width: 110 },
+  barRow: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingVertical: 4 },
+  barTrack: { borderRadius: 8, borderWidth: 2, flex: 1, height: 16, overflow: 'hidden' },
+  barValue: { textAlign: 'right', width: 32 },
+  body: { gap: space.lg, padding: space.lg },
+  flex: { flex: 1 },
+  grow: { flex: 1.6 },
+  hero: {
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    gap: 6,
+    paddingBottom: space.xl,
+    paddingHorizontal: space.lg,
+  },
+  heroAddress: { alignItems: 'flex-start', flexDirection: 'row', gap: 5 },
+  heroAddressText: { color: 'rgba(255,255,255,0.92)', flex: 1, fontFamily: fonts.medium, fontSize: 14 },
+  heroBar: { alignItems: 'center', flexDirection: 'row', gap: space.sm, marginBottom: space.md },
+  heroCity: { color: '#FFC93C', fontFamily: fonts.bold, fontSize: 13, letterSpacing: 1.5 },
+  heroName: { color: '#FFFFFF', fontFamily: fonts.display, fontSize: 38, letterSpacing: -1, lineHeight: 42 },
+  heroPill: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  heroPillText: { color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 12.5 },
+  heroPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  heroSoft: { color: 'rgba(255,255,255,0.9)', fontFamily: fonts.medium, fontSize: 13 },
+  heroStatText: { flex: 1, gap: 2 },
+  heroStats: { alignItems: 'center', flexDirection: 'row', gap: space.lg, marginTop: space.md },
+  heroStrong: { color: '#FFFFFF', fontFamily: fonts.heading, fontSize: 18 },
+  notice: { alignItems: 'center', flexDirection: 'row', gap: space.sm, padding: space.md },
+  priceCell: { flexBasis: '45%', flexGrow: 1 },
+  priceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  priceTile: { gap: 2, padding: space.md },
   voteRow: {
     alignItems: 'center',
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: space.sm,
     marginTop: space.sm,
     paddingTop: space.md,
   },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

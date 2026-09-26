@@ -1,10 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StarRating } from '@/components/StarRating';
-import { Button, Card, Chip, LoadingView, MessageView, Screen, TextField, Txt } from '@/components/ui';
+import { Button, Chip, IconButton, LoadingView, MessageView, Sticker, TextField, Txt } from '@/components/ui';
 import { useI18n } from '@/i18n/I18nProvider';
+import type { TranslationKey } from '@/i18n/translations';
 import {
   confirmPrice,
   deleteRating,
@@ -22,12 +24,11 @@ import { formatPrice, parsePrice } from '@/lib/format';
 import { distanceKm } from '@/lib/geo';
 import { requestPosition } from '@/lib/location';
 import { useTheme } from '@/theme/ThemeProvider';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 import {
-  OPTIONAL_CATEGORIES,
-  RATING_CATEGORIES,
   SHOP_FEATURE_ICONS,
   SHOP_FEATURES,
+  type RatingCategory,
   type RatingValues,
   type ShopDetail,
   type ShopFeature,
@@ -46,16 +47,29 @@ const EMPTY: RatingValues = {
   wartezeit: null,
 };
 
+const STEPS: { key: 'food' | 'shop' | 'features' | 'price'; title: TranslationKey; emoji: string }[] = [
+  { key: 'food', title: 'rate.stepFood', emoji: '🥙' },
+  { key: 'shop', title: 'rate.stepShop', emoji: '🏪' },
+  { key: 'features', title: 'rate.stepFeatures', emoji: '🌶️' },
+  { key: 'price', title: 'rate.stepPrice', emoji: '💶' },
+];
+
+const FOOD: RatingCategory[] = ['geschmack', 'fleischqualitaet', 'sossenqualitaet'];
+const SHOP: RatingCategory[] = ['freundlichkeit', 'sauberkeit', 'preis_leistung', 'wartezeit'];
+
 type PriceAnswer = 'yes' | 'no' | null;
 
 export default function RateScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme } = useTheme();
+  const c = theme.colors;
   const { t, lang } = useI18n();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
   const [shop, setShop] = useState<ShopDetail | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [step, setStep] = useState(0);
   const [values, setValues] = useState<RatingValues>(EMPTY);
   const [noMeat, setNoMeat] = useState(false);
   const [votes, setVotes] = useState<Partial<Record<ShopFeature, Vote>>>({});
@@ -91,11 +105,22 @@ export default function RateScreen() {
       .catch(() => setLoadError(true));
   }, [id, user]);
 
-  if (!user) return <MessageView icon="🔒" message={t('auth.loginRequired')} actionLabel={t('auth.login')} onAction={() => router.replace('/login')} />;
-  if (loadError) return <MessageView icon="⚠️" message={t('common.loadError')} />;
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
+  if (!user) {
+    return <MessageView icon="🔒" message={t('auth.loginRequired')} actionLabel={t('auth.login')} onAction={() => router.replace('/login')} />;
+  }
+  if (loadError) return <MessageView icon="⚠️" message={t('common.loadError')} actionLabel={t('common.back')} onAction={close} />;
   if (!shop) return <LoadingView />;
 
-  const categories = RATING_CATEGORIES.filter((c) => !(noMeat && c === 'fleischqualitaet'));
+  const food = FOOD.filter((cat) => !(noMeat && cat === 'fleischqualitaet'));
+  const stepComplete =
+    STEPS[step].key === 'food'
+      ? food.every((cat) => values[cat] != null)
+      : STEPS[step].key === 'shop'
+        ? SHOP.every((cat) => values[cat] != null)
+        : true;
+  const isLast = step === STEPS.length - 1;
 
   /** Tippen: keine Angabe → gibt es → gibt es nicht → keine Angabe */
   const cycleVote = (f: ShopFeature) =>
@@ -104,33 +129,21 @@ export default function RateScreen() {
       return { ...prev, [f]: cur === 0 ? 1 : cur === 1 ? -1 : 0 };
     });
 
-  const checkOnSite = async () => {
-    const pos = await requestPosition();
-    return pos != null && distanceKm(pos, shop) <= ON_SITE_KM;
-  };
-
   const submit = async () => {
-    if (categories.some((c) => values[c] == null)) {
-      showMessage(t('rate.incomplete'));
-      return;
-    }
     let price: number | null = null;
     const wantsNewPrice = priceAnswer === 'no' || (shop.doener_preis == null && newPrice.trim() !== '');
     if (wantsNewPrice) {
       const parsed = parsePrice(newPrice);
-      if (parsed == null) {
-        showMessage(t('rate.priceInvalid'));
-        return;
-      }
+      if (parsed == null) return showMessage(t('rate.priceInvalid'));
       price = parsed;
     }
 
     setBusy(true);
     try {
-      const verified = alreadyVerified || (await checkOnSite());
-      const finalValues = { ...values, fleischqualitaet: noMeat ? null : values.fleischqualitaet };
+      const pos = alreadyVerified ? null : await requestPosition();
+      const verified = alreadyVerified || (pos != null && distanceKm(pos, shop) <= ON_SITE_KM);
       // Zuerst die Bewertung: Sie berechtigt zur Abstimmung über Besonderheiten
-      await saveRating(shop.id, user.id, finalValues, verified);
+      await saveRating(shop.id, user.id, { ...values, fleischqualitaet: noMeat ? null : values.fleischqualitaet }, verified);
       await saveFeatureVotes(shop.id, user.id, votes);
       // Preis und Kartenzahlung sind Zusatzinfos – Fehler blockieren die Bewertung nicht
       try {
@@ -140,7 +153,7 @@ export default function RateScreen() {
       } catch {
         // ignorieren
       }
-      showMessage(verified ? t('rate.thanksVerified') : t('rate.thanks'), undefined, () => router.back());
+      showMessage(verified ? t('rate.thanksVerified') : t('rate.thanks'), undefined, close);
     } catch (e) {
       showMessage(t('common.error'), errorMessage(e));
     } finally {
@@ -159,118 +172,152 @@ export default function RateScreen() {
     if (!ok) return;
     try {
       await deleteRating(shop.id, user.id);
-      router.back();
+      close();
     } catch (e) {
       showMessage(t('common.error'), errorMessage(e));
     }
   };
 
+  const renderCategory = (cat: RatingCategory) => {
+    const value = values[cat];
+    return (
+      <Sticker key={cat} style={styles.category}>
+        <View style={styles.categoryHead}>
+          <Txt variant="heading" style={styles.flex}>
+            {t(`category.${cat}`)}
+          </Txt>
+          <Txt variant="label" tone={value ? 'primary' : 'muted'}>
+            {value ? t(`stars.${value}` as TranslationKey) : '–'}
+          </Txt>
+        </View>
+        <StarRating value={value} onChange={(v) => setValues((prev) => ({ ...prev, [cat]: v }))} size={44} label={t(`category.${cat}`)} />
+      </Sticker>
+    );
+  };
+
   return (
-    <Screen>
-      <Txt variant="title">{shop.name}</Txt>
-      <Txt tone="muted">{existing ? t('rate.introEdit') : t('rate.introNew')}</Txt>
-      <Card style={{ backgroundColor: theme.colors.surfaceMuted }}>
-        <Txt variant="caption" tone={alreadyVerified ? 'success' : 'muted'}>
-          {alreadyVerified ? t('rate.verifiedAlready') : t('rate.verifyHint')}
-        </Txt>
-      </Card>
-
-      {categories.map((cat) => (
-        <Card key={cat} style={styles.category}>
-          <View style={styles.categoryHeader}>
-            <Txt variant="label">{t(`category.${cat}`)}</Txt>
+    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: c.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Kopf mit Fortschritt */}
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+        <View style={styles.headerRow}>
+          <IconButton icon="close" label={t('common.cancel')} onPress={close} size={42} />
+          <View style={styles.flex}>
+            <Txt variant="caption" tone="muted" numberOfLines={1}>
+              {shop.name}
+            </Txt>
+            <Txt variant="label">{t('rate.step', { n: step + 1, total: STEPS.length })}</Txt>
           </View>
-          <StarRating
-            value={values[cat]}
-            onChange={(v) => setValues((prev) => ({ ...prev, [cat]: v }))}
-            size={34}
-            label={t(`category.${cat}`)}
-          />
-        </Card>
-      ))}
-      {OPTIONAL_CATEGORIES.includes('fleischqualitaet') ? (
-        <Pressable style={styles.switchRow} onPress={() => setNoMeat((v) => !v)}>
-          <Txt style={styles.flex}>🥗 {t('rate.noMeat')}</Txt>
-          <Switch value={noMeat} onValueChange={setNoMeat} trackColor={{ true: theme.colors.primary }} />
-        </Pressable>
-      ) : null}
-
-      <Txt variant="heading" style={styles.sectionTitle}>
-        {t('rate.featuresTitle')}
-      </Txt>
-      <Txt variant="caption" tone="muted">
-        {t('rate.featuresHint')}
-      </Txt>
-      <View style={styles.wrap}>
-        {SHOP_FEATURES.map((f) => {
-          const vote = votes[f] ?? 0;
-          return (
-            <Chip
-              key={f}
-              label={`${vote === 1 ? '✓ ' : vote === -1 ? '✗ ' : ''}${SHOP_FEATURE_ICONS[f]} ${t(`feature.${f}`)}`}
-              selected={vote !== 0}
-              tone={vote === -1 ? 'danger' : 'success'}
-              onPress={() => cycleVote(f)}
-            />
-          );
-        })}
+        </View>
+        <View style={[styles.progress, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <View style={[styles.progressFill, { backgroundColor: c.primary, width: `${((step + 1) / STEPS.length) * 100}%` }]} />
+        </View>
       </View>
 
-      <Txt variant="heading" style={styles.sectionTitle}>
-        {t('rate.priceTitle')}
-      </Txt>
-      {shop.doener_preis != null ? (
-        <>
-          <Txt tone="muted">{t('rate.priceStill', { price: formatPrice(shop.doener_preis, lang) })}</Txt>
-          <View style={styles.row}>
-            <Chip
-              label={t('rate.priceYes')}
-              tone="success"
-              selected={priceAnswer === 'yes'}
-              onPress={() => setPriceAnswer(priceAnswer === 'yes' ? null : 'yes')}
-            />
-            <Chip
-              label={t('rate.priceNo')}
-              tone="danger"
-              selected={priceAnswer === 'no'}
-              onPress={() => setPriceAnswer(priceAnswer === 'no' ? null : 'no')}
-            />
-          </View>
-          {priceAnswer === 'no' ? (
-            <TextField label={t('rate.priceNew')} value={newPrice} onChangeText={setNewPrice} keyboardType="decimal-pad" placeholder="7,50" />
-          ) : null}
-        </>
-      ) : (
-        <TextField label={t('rate.priceUnknown')} value={newPrice} onChangeText={setNewPrice} keyboardType="decimal-pad" placeholder="7,50" />
-      )}
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Txt style={styles.stepEmoji}>{STEPS[step].emoji}</Txt>
+        <Txt variant="display">{t(STEPS[step].title)}</Txt>
 
-      <Txt variant="heading" style={styles.sectionTitle}>
-        {t('rate.cardTitle')}
-      </Txt>
-      <View style={styles.row}>
-        <Chip label={`💳 ${t('form.cardYes')}`} selected={card === true} onPress={() => setCard(true)} />
-        <Chip label={`💵 ${t('form.cardNo')}`} selected={card === false} onPress={() => setCard(false)} />
-        <Chip label={t('form.cardUnknown')} selected={card === null} onPress={() => setCard(null)} />
+        {STEPS[step].key === 'food' ? (
+          <>
+            {step === 0 ? (
+              <Txt variant="caption" tone={alreadyVerified ? 'success' : 'muted'}>
+                {alreadyVerified ? t('rate.verifiedAlready') : t('rate.verifyHint')}
+              </Txt>
+            ) : null}
+            {food.map(renderCategory)}
+            <View style={styles.switchRow}>
+              <Txt variant="label" style={styles.flex}>
+                🥗 {t('rate.noMeat')}
+              </Txt>
+              <Switch value={noMeat} onValueChange={setNoMeat} trackColor={{ true: c.primary }} />
+            </View>
+          </>
+        ) : null}
+
+        {STEPS[step].key === 'shop' ? SHOP.map(renderCategory) : null}
+
+        {STEPS[step].key === 'features' ? (
+          <>
+            <Txt tone="muted">{t('rate.featuresHint')}</Txt>
+            <View style={styles.wrap}>
+              {SHOP_FEATURES.map((f) => {
+                const vote = votes[f] ?? 0;
+                return (
+                  <Chip
+                    key={f}
+                    icon={vote === 1 ? 'checkmark' : vote === -1 ? 'close' : undefined}
+                    label={`${SHOP_FEATURE_ICONS[f]} ${t(`feature.${f}`)}`}
+                    selected={vote !== 0}
+                    tone={vote === -1 ? 'danger' : 'success'}
+                    onPress={() => cycleVote(f)}
+                  />
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {STEPS[step].key === 'price' ? (
+          <>
+            <Sticker style={styles.category}>
+              {shop.doener_preis != null ? (
+                <>
+                  <Txt variant="heading">{t('rate.priceStill', { price: formatPrice(shop.doener_preis, lang) })}</Txt>
+                  <View style={styles.wrap}>
+                    <Chip label={t('rate.priceYes')} icon="checkmark" tone="success" selected={priceAnswer === 'yes'} onPress={() => setPriceAnswer(priceAnswer === 'yes' ? null : 'yes')} />
+                    <Chip label={t('rate.priceNo')} icon="swap-horizontal" tone="danger" selected={priceAnswer === 'no'} onPress={() => setPriceAnswer(priceAnswer === 'no' ? null : 'no')} />
+                  </View>
+                  {priceAnswer === 'no' ? (
+                    <TextField label={t('rate.priceNew')} value={newPrice} onChangeText={setNewPrice} keyboardType="decimal-pad" placeholder="7,50" icon="pricetag" />
+                  ) : null}
+                </>
+              ) : (
+                <TextField label={t('rate.priceUnknown')} value={newPrice} onChangeText={setNewPrice} keyboardType="decimal-pad" placeholder="7,50" icon="pricetag" />
+              )}
+            </Sticker>
+            <Sticker style={styles.category}>
+              <Txt variant="heading">{t('rate.cardTitle')}</Txt>
+              <View style={styles.wrap}>
+                <Chip icon="card" label={t('form.cardYes')} selected={card === true} onPress={() => setCard(true)} />
+                <Chip icon="cash" label={t('form.cardNo')} selected={card === false} onPress={() => setCard(false)} />
+                <Chip label={t('form.cardUnknown')} selected={card === null} onPress={() => setCard(null)} />
+              </View>
+            </Sticker>
+            {existing ? <Button title={t('rate.deleteRating')} icon="trash" variant="ghost" onPress={remove} /> : null}
+          </>
+        ) : null}
+      </ScrollView>
+
+      {/* Navigation zwischen den Schritten */}
+      <View style={[styles.footer, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + space.md }]}>
+        {step > 0 ? (
+          <Button title={t('rate.back')} icon="arrow-back" variant="plain" onPress={() => setStep(step - 1)} style={styles.flex} />
+        ) : null}
+        <Button
+          title={isLast ? (existing ? t('rate.submitEdit') : t('rate.submitNew')) : t('rate.next')}
+          icon={isLast ? 'checkmark-circle' : 'arrow-forward'}
+          disabled={!stepComplete}
+          loading={busy}
+          onPress={() => (isLast ? submit() : setStep(step + 1))}
+          style={styles.grow}
+        />
       </View>
-
-      <Button
-        title={existing ? t('rate.submitEdit') : t('rate.submitNew')}
-        onPress={submit}
-        loading={busy}
-        style={styles.submit}
-      />
-      {existing ? <Button title={t('rate.deleteRating')} variant="danger" compact onPress={remove} /> : null}
-    </Screen>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  category: { alignItems: 'center', gap: space.sm },
-  categoryHeader: { alignSelf: 'stretch' },
+  category: { gap: space.md, padding: space.lg },
+  categoryHead: { alignItems: 'center', flexDirection: 'row', gap: space.sm },
+  content: { gap: space.lg, padding: space.lg, paddingBottom: 40 },
   flex: { flex: 1 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  sectionTitle: { marginTop: space.md },
-  submit: { marginTop: space.lg },
+  footer: { borderTopWidth: 2, flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg, paddingTop: space.md },
+  grow: { flex: 2 },
+  header: { gap: space.md, paddingHorizontal: space.lg, paddingBottom: space.sm },
+  headerRow: { alignItems: 'center', flexDirection: 'row', gap: space.md },
+  progress: { borderRadius: radius.pill, borderWidth: 2, height: 14, overflow: 'hidden' },
+  progressFill: { height: '100%' },
+  stepEmoji: { fontSize: 44, lineHeight: 52 },
   switchRow: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: space.xs },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

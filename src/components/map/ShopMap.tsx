@@ -14,13 +14,13 @@ import { shopLayers, shopsToGeoJSON, type ShopMapHandle, type ShopMapProps, mapS
 
 /** Native Karte (MapLibre, Android/iOS). */
 export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
-  { shops, initialCamera, palette, dark, showUserLocation, onBoundsChange, onShopPress },
+  { shops, initialCamera, palette, dark, showUserLocation, selectedId, onBoundsChange, onShopPress, onMapPress },
   ref
 ) {
   const cameraRef = useRef<CameraRef>(null);
   const sourceRef = useRef<GeoJSONSourceRef>(null);
   const data = useMemo(() => shopsToGeoJSON(shops), [shops]);
-  const layers = useMemo(() => shopLayers(palette), [palette]);
+  const layers = useMemo(() => shopLayers(palette, selectedId), [palette, selectedId]);
 
   useImperativeHandle(ref, () => ({
     flyTo: ({ latitude, longitude, zoom }) =>
@@ -35,6 +35,7 @@ export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
       attribution
       attributionPosition={{ bottom: 8, left: 8 }}
       compass={false}
+      onPress={onMapPress}
       onRegionDidChange={(e) => {
         const [west, south, east, north] = e.nativeEvent.bounds;
         onBoundsChange({ minLat: south, maxLat: north, minLon: west, maxLon: east });
@@ -73,6 +74,7 @@ export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
         <Layer {...layers.clusters} />
         <Layer {...layers.clusterCount} />
         <Layer {...layers.points} />
+        <Layer {...layers.selected} />
       </GeoJSONSource>
     </Map>
   );

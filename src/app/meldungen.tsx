@@ -9,7 +9,7 @@ import { errorMessage, showMessage } from '@/lib/dialog';
 import { formatDate } from '@/lib/format';
 import { useFocusedAsync } from '@/lib/useAsync';
 import { useTheme } from '@/theme/ThemeProvider';
-import { space } from '@/theme/tokens';
+import { fonts, space } from '@/theme/tokens';
 
 /** Admin-Postfach: Meldungen sichten und abhaken (per RLS nur für Admins lesbar). */
 export default function ReportsScreen() {
@@ -77,7 +77,7 @@ export default function ReportsScreen() {
 }
 
 const styles = StyleSheet.create({
-  bold: { fontWeight: '700' },
+  bold: { fontFamily: fonts.bold },
   done: { opacity: 0.65 },
   list: { flexGrow: 1, gap: space.md, padding: space.lg },
   row: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, justifyContent: 'space-between' },

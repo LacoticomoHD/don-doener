@@ -10,8 +10,8 @@ import { SHOP_FEATURE_ICONS, SHOP_FEATURES } from '@/types';
 
 import { Button, Chip, Txt } from './ui';
 
-/** Horizontale Schnellfilter + Knopf für alle Besonderheiten (Bottom-Sheet). */
-export function FilterBar({ floating = false }: { floating?: boolean }) {
+/** Horizontale Schnellfilter + Knopf für alle Besonderheiten. */
+export function FilterBar({ inset = space.lg }: { inset?: number }) {
   const { t } = useI18n();
   const filters = useFilters();
   const [open, setOpen] = useState(false);
@@ -22,34 +22,25 @@ export function FilterBar({ floating = false }: { floating?: boolean }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.bar}
+        contentContainerStyle={[styles.bar, { paddingHorizontal: inset }]}
         keyboardShouldPersistTaps="handled"
       >
         <Chip
-          label={`⚙️ ${t('filter.title')}${featureCount ? ` (${featureCount})` : ''}`}
+          icon="options"
+          label={featureCount ? `${t('filter.title')} · ${featureCount}` : t('filter.title')}
           selected={featureCount > 0}
+          tone="primary"
           onPress={() => setOpen(true)}
-          style={floating && styles.shadow}
         />
-        <Chip
-          label={`🕒 ${t('filter.openNow')}`}
-          selected={filters.openNow}
-          onPress={() => filters.setOpenNow(!filters.openNow)}
-          style={floating && styles.shadow}
-        />
-        <Chip
-          label={`⭐ ${t('filter.rated')}`}
-          selected={filters.ratedOnly}
-          onPress={() => filters.setRatedOnly(!filters.ratedOnly)}
-          style={floating && styles.shadow}
-        />
+        <Chip icon="time" label={t('filter.openNow')} selected={filters.openNow} onPress={() => filters.setOpenNow(!filters.openNow)} />
+        <Chip icon="star" label={t('filter.rated')} selected={filters.ratedOnly} onPress={() => filters.setRatedOnly(!filters.ratedOnly)} />
         {filters.features.map((f) => (
           <Chip
             key={f}
-            label={`${SHOP_FEATURE_ICONS[f]} ${t(`feature.${f}`)} ✕`}
+            icon="close"
+            label={`${SHOP_FEATURE_ICONS[f]} ${t(`feature.${f}`)}`}
             selected
             onPress={() => filters.toggleFeature(f)}
-            style={floating && styles.shadow}
           />
         ))}
       </ScrollView>
@@ -63,18 +54,14 @@ function FilterSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
   const { t } = useI18n();
   const filters = useFilters();
   const insets = useSafeAreaInsets();
+  const c = theme.colors;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={[styles.backdrop, { backgroundColor: theme.colors.overlay }]} onPress={onClose} />
-      <View
-        style={[
-          styles.sheet,
-          { backgroundColor: theme.colors.background, paddingBottom: insets.bottom + space.lg },
-        ]}
-      >
-        <View style={[styles.handle, { backgroundColor: theme.colors.border }]} />
-        <Txt variant="heading">{t('filter.features')}</Txt>
+      <Pressable style={[styles.backdrop, { backgroundColor: c.overlay }]} onPress={onClose} />
+      <View style={[styles.sheet, { backgroundColor: c.background, borderColor: c.border, paddingBottom: insets.bottom + space.lg }]}>
+        <View style={[styles.handle, { backgroundColor: c.border }]} />
+        <Txt variant="title">{t('filter.features')}</Txt>
         <View style={styles.wrap}>
           {SHOP_FEATURES.map((f) => (
             <Chip
@@ -86,7 +73,7 @@ function FilterSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
           ))}
         </View>
         <View style={styles.actions}>
-          <Button title={t('filter.reset')} variant="secondary" onPress={filters.reset} style={styles.flex} />
+          <Button title={t('filter.reset')} variant="plain" onPress={filters.reset} style={styles.flex} />
           <Button title={t('filter.apply')} onPress={onClose} style={styles.flex} />
         </View>
       </View>
@@ -97,21 +84,16 @@ function FilterSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
 const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: space.md, marginTop: space.sm },
   backdrop: { flex: 1 },
-  bar: { gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.sm },
+  bar: { gap: space.sm, paddingVertical: space.sm },
   flex: { flex: 1 },
-  handle: { alignSelf: 'center', borderRadius: 3, height: 5, marginBottom: space.sm, width: 44 },
-  shadow: {
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-  },
+  handle: { alignSelf: 'center', borderRadius: 3, height: 5, marginBottom: space.xs, width: 44 },
   sheet: {
+    borderBottomWidth: 0,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    gap: space.md,
-    padding: space.lg,
+    borderWidth: 2,
+    gap: space.lg,
+    padding: space.xl,
   },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

@@ -2,14 +2,14 @@ import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { StarRating } from '@/components/StarRating';
-import { LoadingView, MessageView, Txt } from '@/components/ui';
+import { LoadingView, MessageView, Sticker, Txt } from '@/components/ui';
 import { useI18n } from '@/i18n/I18nProvider';
 import { fetchMyRatings } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatScore } from '@/lib/format';
 import { useFocusedAsync } from '@/lib/useAsync';
 import { useTheme } from '@/theme/ThemeProvider';
-import { radius, space } from '@/theme/tokens';
+import { fonts, space } from '@/theme/tokens';
 import { RATING_CATEGORIES, type MyRating } from '@/types';
 
 function average(r: MyRating): number {
@@ -38,11 +38,9 @@ export default function MyRatingsScreen() {
         return (
           <Pressable
             onPress={() => item.shop && router.push({ pathname: '/laden/[id]/bewerten', params: { id: item.shop.id } })}
-            style={({ pressed }) => [
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: pressed ? 0.8 : 1 },
-            ]}
           >
+            {({ pressed }) => (
+            <Sticker pressed={pressed} style={styles.card}>
             <View style={styles.header}>
               <Txt variant="heading" numberOfLines={1} style={styles.flex}>
                 {item.shop?.name ?? '–'}
@@ -61,6 +59,8 @@ export default function MyRatingsScreen() {
                 {formatDate(item.updated_at, lang)} ›
               </Txt>
             </View>
+            </Sticker>
+            )}
           </Pressable>
         );
       }}
@@ -69,10 +69,10 @@ export default function MyRatingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  bold: { fontWeight: '700' },
-  card: { borderRadius: radius.lg, borderWidth: 1, gap: 4, padding: 14 },
+  bold: { fontFamily: fonts.bold },
+  card: { gap: 4, padding: 14 },
   flex: { flex: 1 },
   header: { alignItems: 'center', flexDirection: 'row', gap: space.sm },
-  list: { flexGrow: 1, gap: 10, padding: space.lg },
+  list: { flexGrow: 1, gap: space.md, padding: space.lg },
   right: { flex: 1, textAlign: 'right' },
 });

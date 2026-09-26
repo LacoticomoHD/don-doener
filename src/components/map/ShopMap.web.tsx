@@ -18,18 +18,18 @@ setWorkerUrl(new URL('/maplibre/maplibre-gl-worker.mjs', window.location.origin)
 
 /** Web-Karte (maplibre-gl) – gleiche Layer wie in der App. */
 export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
-  { shops, initialCamera, palette, dark, showUserLocation, onBoundsChange, onShopPress },
+  { shops, initialCamera, palette, dark, showUserLocation, selectedId, onBoundsChange, onShopPress, onMapPress },
   ref
 ) {
   const containerRef = useRef<View>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const userMarker = useRef<Marker | null>(null);
   const data = useMemo(() => shopsToGeoJSON(shops), [shops]);
-  const layers = useMemo(() => shopLayers(palette), [palette]);
+  const layers = useMemo(() => shopLayers(palette, selectedId), [palette, selectedId]);
 
   // Callbacks in Refs, damit die Karte nicht bei jedem Render neu entsteht
-  const callbacks = useRef({ onBoundsChange, onShopPress });
-  callbacks.current = { onBoundsChange, onShopPress };
+  const callbacks = useRef({ onBoundsChange, onShopPress, onMapPress });
+  callbacks.current = { onBoundsChange, onShopPress, onMapPress };
   const latest = useRef({ data, layers });
   latest.current = { data, layers };
 
@@ -63,7 +63,7 @@ export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
     map.on('style.load', () => {
       const { data: d, layers: l } = latest.current;
       map.addSource('shops', { type: 'geojson', data: d, cluster: true, clusterRadius: 45, clusterMaxZoom: 13 });
-      for (const layer of [l.clusters, l.clusterCount, l.points]) {
+      for (const layer of [l.clusters, l.clusterCount, l.points, l.selected]) {
         map.addLayer({ ...layer, source: 'shops' } as LayerSpecification);
       }
       emitBounds();
@@ -76,6 +76,11 @@ export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
       const source = map.getSource('shops') as GeoJSONSource;
       const zoom = await source.getClusterExpansionZoom(feature.properties.cluster_id as number);
       map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom: zoom + 0.5 });
+    });
+    // Klick ins Leere schließt die Vorschau
+    map.on('click', (e) => {
+      const hits = map.queryRenderedFeatures(e.point, { layers: ['shop-points', 'shop-clusters'] });
+      if (hits.length === 0) callbacks.current.onMapPress();
     });
     map.on('click', 'shop-points', (e: MapLayerMouseEvent) => {
       const id = e.features?.[0]?.properties?.id;
@@ -98,6 +103,12 @@ export const ShopMap = forwardRef<ShopMapHandle, ShopMapProps>(function ShopMap(
   useEffect(() => {
     mapRef.current?.setStyle(mapStyleUrl(dark));
   }, [dark]);
+
+  // Hervorhebung des ausgewählten Ladens nachziehen
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.getLayer('shop-selected')) map.setFilter('shop-selected', layers.selected.filter ?? null);
+  }, [layers]);
 
   // Neue Läden in die bestehende Quelle schreiben
   useEffect(() => {

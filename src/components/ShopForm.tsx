@@ -183,7 +183,7 @@ export function ShopForm({
           onSubmitEditing={searchAddress}
           returnKeyType="search"
         />
-        <Button title={t('form.addressSearch')} icon="🔍" variant="secondary" onPress={searchAddress} loading={searching} />
+        <Button title={t('form.addressSearch')} icon="search" variant="secondary" onPress={searchAddress} loading={searching} />
         {results.length > 1 ? (
           <Txt variant="caption" tone="muted">
             {t('form.addressPick')}

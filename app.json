@@ -58,7 +58,8 @@
         }
       ],
       "@maplibre/maplibre-react-native",
-      "expo-localization"
+      "expo-localization",
+      "expo-font"
     ],
     "owner": "cacotilomo",
     "extra": {
