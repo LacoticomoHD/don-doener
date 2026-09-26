@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Don Döner",
+    "slug": "don-doener",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "scheme": "dondoener",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "de.dondoener.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Don Döner nutzt deinen Standort, um Dönerläden in deiner Nähe anzuzeigen."
+      }
+    },
+    "android": {
+      "package": "de.dondoener.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#C0392B"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sqlite",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#FAF7F2",
+          "dark": {
+            "backgroundColor": "#17130F"
+          }
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Don Döner nutzt deinen Standort, um Dönerläden in deiner Nähe anzuzeigen."
+        }
+      ],
+      "@maplibre/maplibre-react-native",
+      "expo-localization"
+    ]
+  }
+}
